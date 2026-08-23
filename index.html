@@ -312,6 +312,23 @@
   body.mode-desktop .stat-grid{grid-template-columns:repeat(4,1fr);}
   body.mode-desktop .form-wide{max-width:640px;}
 
+  /* ===== COCONUT SUB-TABS ===== */
+  .subtab-toggle{
+    display:inline-flex;gap:2px;background:var(--paper);padding:4px;border-radius:999px;
+    border:1px solid var(--line);margin-bottom:16px;
+  }
+  .subtab-btn{
+    background:none;border:none;padding:8px 16px;border-radius:999px;cursor:pointer;
+    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+    color:var(--ink-soft);transition:background .18s,color .18s;
+  }
+  .subtab-btn.active{background:var(--palm);color:#fff;}
+  .cocotab-panel{display:none;}
+  .cocotab-panel.active{display:block;}
+
+  .coco-line{font-size:11.5px;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;}
+  .coco-line span b{color:var(--ink);font-family:var(--font-data);font-weight:600;}
+
   /* ===== LOADING ===== */
   .splash{
     position:fixed;inset:0;z-index:2000;
@@ -490,7 +507,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label><svg class="icon"><use href="#i-store"/></svg>Dealer / Shop / Person</label>
+              <label><svg class="icon"><use href="#i-store"/></svg>Dealer/Person Name</label>
               <input type="text" id="txDealer" placeholder="Local Market">
             </div>
           </div>
@@ -508,6 +525,12 @@
       <section id="coconut" class="view">
         <div class="view-head form-wide"><h2><svg class="icon"><use href="#i-coconut"/></svg>Coconut Income</h2></div>
 
+        <div class="subtab-toggle" id="cocoSubTabs">
+          <button class="subtab-btn active" data-cocotab="add">Add Income</button>
+          <button class="subtab-btn" data-cocotab="history">Sales History</button>
+        </div>
+
+        <div id="cocoAddPanel" class="cocotab-panel active">
         <div class="panel form-wide">
           <div class="form-group">
             <label><svg class="icon"><use href="#i-calendar"/></svg>Date</label>
@@ -515,8 +538,8 @@
           </div>
 
           <div class="form-group">
-            <label><svg class="icon"><use href="#i-store"/></svg>Dealer / Shop / Person</label>
-            <input type="text" id="cocoDealerName" placeholder="ABC Coconut Traders" required>
+            <label><svg class="icon"><use href="#i-store"/></svg>Dealer/Shop/Person Name</label>
+            <input type="text" id="cocoDealerName" placeholder="ABC Traders" required>
           </div>
 
           <div class="section-title"><svg class="icon" style="width:13px;height:13px;"><use href="#i-coconut"/></svg>Green Coconut</div>
@@ -558,6 +581,61 @@
           </div>
 
           <button class="btn btn-primary" onclick="addCoconutIncome()"><svg class="icon" style="width:15px;height:15px;"><use href="#i-check"/></svg>Submit</button>
+        </div>
+        </div>
+
+        <div id="cocoHistoryPanel" class="cocotab-panel">
+          <div class="panel form-wide" style="margin-bottom:14px;">
+            <div class="row">
+              <div class="form-group">
+                <label><svg class="icon"><use href="#i-coconut"/></svg>Coconut Type</label>
+                <select id="cocoFilterType" onchange="renderCoconutHistory()">
+                  <option value="all">All Types</option>
+                  <option value="green">Green</option>
+                  <option value="podi">Podi</option>
+                  <option value="black">Black</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label><svg class="icon"><use href="#i-calendar"/></svg>Date Range</label>
+                <select id="cocoFilterRange" onchange="renderCoconutHistory()">
+                  <option value="30">This Month</option>
+                  <option value="90">Last 3 Months</option>
+                  <option value="180">Last 6 Months</option>
+                  <option value="all" selected>All Available</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="form-group">
+                <label><svg class="icon"><use href="#i-calendar"/></svg>Year</label>
+                <select id="cocoFilterYear" onchange="renderCoconutHistory()">
+                  <option value="all">All Years</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label><svg class="icon"><use href="#i-store"/></svg>Dealer/Shop/Person</label>
+                <input type="text" id="cocoFilterDealer" placeholder="Search dealer..." oninput="renderCoconutHistory()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label><svg class="icon"><use href="#i-wallet"/></svg>Rate Range (₹)</label>
+              <div class="row" style="grid-template-columns:1fr 1fr;gap:6px;">
+                <input type="number" id="cocoFilterMinRate" placeholder="Min" oninput="renderCoconutHistory()">
+                <input type="number" id="cocoFilterMaxRate" placeholder="Max" oninput="renderCoconutHistory()">
+              </div>
+            </div>
+            <div class="view-caption" style="margin:6px 0 0;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span>Picking a Year overrides Date Range. Rate range applies to the selected coconut type only.</span>
+              <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:10.5px;" onclick="refreshCoconutHistory()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="stat-grid" id="cocoHistorySummary"></div>
+
+          <div class="view-caption" id="cocoLoadedInfo" style="margin-bottom:10px;"></div>
+
+          <div id="cocoHistoryList"></div>
         </div>
       </section>
 
@@ -656,6 +734,9 @@
 // =========================================================
 const DEPLOYMENT_URL = 'https://script.google.com/macros/s/AKfycbx-ZXn8wo9GDodxrMLhq435V9p3jjMUZGx_97cRJZnSVjVI7_lndTSjVELlCNPO4mxOGQ/exec';
 
+// PASTE your Google Sheet's normal share URL here (Sheet → Share → Copy link).
+// Looks like: https://docs.google.com/spreadsheets/d/XXXXXXXXXXXXXXXX/edit
+// Leave blank to hide the "Show More" link in Recent Transactions.
 const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1D-bRiOxTWcvpKcXy_3ZEIWdRdhark3K-GqloqOrnX8E/edit?usp=sharing';
 
 let categories = {
@@ -689,6 +770,19 @@ document.getElementById('cocoDate').valueAsDate = new Date();
 document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
+
+document.querySelectorAll('#cocoSubTabs .subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchCocoSubTab(btn.getAttribute('data-cocotab')));
+});
+
+function switchCocoSubTab(tab){
+    document.querySelectorAll('#cocoSubTabs .subtab-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-cocotab') === tab);
+    });
+    document.getElementById('cocoAddPanel').classList.toggle('active', tab === 'add');
+    document.getElementById('cocoHistoryPanel').classList.toggle('active', tab === 'history');
+    if (tab === 'history') loadCoconutTransactions();
+}
 
 function switchTab(tabName){
     document.querySelectorAll('.view').forEach(c => c.classList.remove('active'));
@@ -988,11 +1082,188 @@ function addCoconutIncome() {
                 document.getElementById('cocoNotes').value = '';
                 updateCocoEstimate();
                 loadDashboardStats();
+                coconutTransactions = null; // stale cache — refetch next time Sales History opens
             } else {
                 showToast('Error: ' + result.error, 'error');
             }
         })
         .catch(e => showToast('Error: ' + e.message, 'error'));
+}
+
+// =========================================================
+// COCONUT SALES HISTORY — reads getCoconutTransactions
+// (new Apps Script action; see setup notes)
+// =========================================================
+let coconutTransactions = null;
+let coconutHistoryError = null;
+
+function refreshCoconutHistory(){
+    coconutTransactions = null;
+    loadCoconutTransactions();
+}
+
+function loadCoconutTransactions(){
+    if (coconutTransactions !== null){ renderCoconutHistory(); return; }
+    document.getElementById('cocoHistoryList').innerHTML = `
+        <div class="section-spinner"><div class="ring"></div><span>Fetching coconut sales…</span></div>`;
+    document.getElementById('cocoHistorySummary').innerHTML = '';
+    coconutHistoryError = null;
+    const params = new URLSearchParams({ action: 'getCoconutTransactions' });
+    fetch(DEPLOYMENT_URL + '?' + params)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && Array.isArray(data.transactions)) {
+                coconutTransactions = data.transactions;
+                console.log('getCoconutTransactions returned', data.transactions.length, 'rows:', data.transactions);
+                populateCocoYearFilter();
+            } else {
+                coconutTransactions = [];
+                coconutHistoryError = data.error || 'Could not read coconut sales. Have you added the getCoconutTransactions action to your Apps Script?';
+            }
+        })
+        .catch(e => {
+            coconutTransactions = null;
+            coconutHistoryError = e.message || 'Connection error';
+        })
+        .finally(() => {
+            try { renderCoconutHistory(); }
+            catch (err) { console.error('Coconut history render failed:', err); }
+        });
+}
+
+function parseCocoDate(tx){
+    const raw = tx.rawDate || tx.date;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function populateCocoYearFilter(){
+    const sel = document.getElementById('cocoFilterYear');
+    const current = sel.value;
+    const years = new Set();
+    (coconutTransactions || []).forEach(tx => {
+        const d = parseCocoDate(tx);
+        if (d) years.add(d.getFullYear());
+    });
+    const sorted = Array.from(years).sort((a, b) => b - a);
+    sel.innerHTML = '<option value="all">All Years</option>' +
+        sorted.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (sorted.includes(parseInt(current, 10))) sel.value = current;
+}
+
+function renderCoconutHistory(){
+    const list = coconutTransactions || [];
+    const type = document.getElementById('cocoFilterType').value;
+    const rangeVal = document.getElementById('cocoFilterRange').value;
+    const yearVal = document.getElementById('cocoFilterYear').value;
+    const dealerQuery = document.getElementById('cocoFilterDealer').value.trim().toLowerCase();
+    const minRate = parseFloat(document.getElementById('cocoFilterMinRate').value);
+    const maxRate = parseFloat(document.getElementById('cocoFilterMaxRate').value);
+
+    // A specific Year takes priority over the relative Date Range.
+    let cutoff = null;
+    if (yearVal === 'all' && rangeVal !== 'all'){
+        cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - parseInt(rangeVal, 10));
+    }
+
+    const rateField = type === 'green' ? 'greenRate' : type === 'podi' ? 'podiRate' : type === 'black' ? 'blackRate' : null;
+    const countField = type === 'green' ? 'greenCount' : type === 'podi' ? 'podiCount' : type === 'black' ? 'blackCount' : null;
+
+    const filtered = list.filter(tx => {
+        if (yearVal !== 'all'){
+            const d = parseCocoDate(tx);
+            if (!d || d.getFullYear() !== parseInt(yearVal, 10)) return false;
+        }
+        if (cutoff){
+            const d = parseCocoDate(tx);
+            if (d && d < cutoff) return false;
+        }
+        if (dealerQuery && !(tx.dealer || '').toLowerCase().includes(dealerQuery)) return false;
+
+        if (type !== 'all'){
+            const qty = parseFloat(tx[countField]) || 0;
+            if (qty <= 0) return false;
+            const rate = parseFloat(tx[rateField]) || 0;
+            if (!isNaN(minRate) && rate < minRate) return false;
+            if (!isNaN(maxRate) && rate > maxRate) return false;
+        } else if (!isNaN(minRate) || !isNaN(maxRate)){
+            const rates = [parseFloat(tx.greenRate)||0, parseFloat(tx.podiRate)||0, parseFloat(tx.blackRate)||0];
+            const anyMatch = rates.some(r => r > 0 && (isNaN(minRate) || r >= minRate) && (isNaN(maxRate) || r <= maxRate));
+            if (!anyMatch) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0){
+        const msg = coconutHistoryError
+            ? `Couldn't load coconut sales: ${coconutHistoryError}`
+            : (list.length === 0 ? 'No coconut sales recorded yet.' : 'No sales match these filters.');
+        document.getElementById('cocoHistorySummary').innerHTML = `
+            <div class="stat-card ${coconutHistoryError ? 'neg' : ''}" style="grid-column:1/-1;">
+                <div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-alert"/></svg>${coconutHistoryError ? 'Connection issue' : 'No results'}</div>
+                <div class="svalue" style="font-size:13px;font-weight:500;">${msg}</div>
+            </div>`;
+        document.getElementById('cocoLoadedInfo').textContent = coconutHistoryError ? '' : `Loaded ${list.length} sale${list.length === 1 ? '' : 's'} from your sheet — none match these filters.`;
+        document.getElementById('cocoHistoryList').innerHTML = '';
+        return;
+    }
+
+    // ---- Summary stats ----
+    if (type === 'all'){
+        let gross = 0, deductions = 0, net = 0;
+        filtered.forEach(tx => {
+            gross += parseFloat(tx.gross) || 0;
+            deductions += parseFloat(tx.deductions) || 0;
+            net += parseFloat(tx.net) || 0;
+        });
+        document.getElementById('cocoHistorySummary').innerHTML = `
+            <div class="stat-card pos"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-up"/></svg>Gross</div><div class="svalue">₹${formatINR(gross)}</div></div>
+            <div class="stat-card neg"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-down"/></svg>Deductions</div><div class="svalue">₹${formatINR(deductions)}</div></div>
+            <div class="stat-card"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-wallet"/></svg>Net</div><div class="svalue">₹${formatINR(net)}</div></div>
+            <div class="stat-card"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-list"/></svg>Entries</div><div class="svalue">${filtered.length}</div></div>`;
+    } else {
+        let totalQty = 0, totalValue = 0;
+        filtered.forEach(tx => {
+            const qty = parseFloat(tx[countField]) || 0;
+            const rate = parseFloat(tx[rateField]) || 0;
+            totalQty += qty;
+            totalValue += qty * rate;
+        });
+        const avgRate = totalQty > 0 ? totalValue / totalQty : 0;
+        const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+        document.getElementById('cocoHistorySummary').innerHTML = `
+            <div class="stat-card"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-coconut"/></svg>${typeLabel} Sold</div><div class="svalue">${formatINR(totalQty)}</div></div>
+            <div class="stat-card"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-wallet"/></svg>Avg Rate</div><div class="svalue">₹${avgRate.toFixed(2)}</div></div>
+            <div class="stat-card pos"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-up"/></svg>Total Value</div><div class="svalue">₹${formatINR(totalValue)}</div></div>
+            <div class="stat-card"><div class="slabel"><svg class="icon" style="width:13px;height:13px;"><use href="#i-list"/></svg>Entries</div><div class="svalue">${filtered.length}</div></div>`;
+    }
+
+    // ---- Card list ----
+    const html = filtered.slice().reverse().map(tx => {
+        const lines = [];
+        if ((parseFloat(tx.greenCount) || 0) > 0) lines.push(`Green: <b>${tx.greenCount}</b> × ₹${tx.greenRate}`);
+        if ((parseFloat(tx.podiCount) || 0) > 0) lines.push(`Podi: <b>${tx.podiCount}</b> × ₹${tx.podiRate}`);
+        if ((parseFloat(tx.blackCount) || 0) > 0) lines.push(`Black: <b>${tx.blackCount}</b> × ₹${tx.blackRate}`);
+        return `
+            <div class="card income">
+                <div class="card-header">
+                    <div class="card-title">${tx.dealer || 'Unknown dealer'}</div>
+                    <div class="card-amount income">₹${formatINR(parseFloat(tx.net))}</div>
+                </div>
+                <div class="card-meta">
+                    <span>${tx.date}</span>
+                    ${tx.paymentMethod ? `<span class="badge income">${tx.paymentMethod}</span>` : ''}
+                </div>
+                <div class="coco-line">${lines.map(l => `<span>${l}</span>`).join('')}</div>
+                <div class="card-footer">
+                    <span class="desc">${tx.notes || ''}</span>
+                    <span style="font-size:10.5px;color:var(--ink-soft);white-space:nowrap;">Gross ₹${formatINR(parseFloat(tx.gross))} − Ded ₹${formatINR(parseFloat(tx.deductions))}</span>
+                </div>
+            </div>`;
+    }).join('');
+    document.getElementById('cocoLoadedInfo').textContent = `Loaded ${list.length} sale${list.length === 1 ? '' : 's'} from your sheet — showing ${filtered.length} matching these filters.`;
+    document.getElementById('cocoHistoryList').innerHTML = html + showMoreRowHTML();
 }
 
 // =========================================================
