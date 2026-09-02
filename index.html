@@ -748,8 +748,13 @@ let categories = {
 };
 
 let recentTransactionsData = [];      // used by Recent tab + Edit
-let analyticsTransactions = null;     // cache for Analytics tab
-let charts = {};                      // Chart.js instances
+let analyticsTransactions = null;     // points to the same shared transaction cache
+let transactionsCache = null;         // shared frontend cache for Recent + Analytics
+let categoriesCache = null;            // frontend cache for Categories
+let transactionsCacheTime = 0;
+let categoriesCacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000;       // keep cached data for 5 minutes
+let charts = {};                       // Chart.js instances
 
 const CATEGORY_PALETTE = ['#2F6B4F','#8B5E34','#D99B2B','#4F8AA6','#6FA98A','#C1502E','#7A5C8E','#B08968','#3F6B8A','#A3763B'];
 
@@ -865,18 +870,41 @@ function hideSplash(){
     if (el) el.classList.add('hidden');
 }
 
-function loadCategories() {
+function loadCategories(forceRefresh = false) {
+    const now = Date.now();
+
+    // Use cached categories while they are still fresh.
+    if (!forceRefresh && categoriesCache && (now - categoriesCacheTime < CACHE_TTL)) {
+        categories = categoriesCache;
+        renderCategoryLists();
+        updateCategoryDropdown();
+        return Promise.resolve(categoriesCache);
+    }
+
     const params = new URLSearchParams({ action: 'getCategories' });
     return fetch(DEPLOYMENT_URL + '?' + params)
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                categories = data;
-                populateDropdowns();
+                categoriesCache = data.categories;
+                categoriesCacheTime = Date.now();
+                categories = categoriesCache;
                 renderCategoryLists();
+                updateCategoryDropdown();
+                return categoriesCache;
             }
+            throw new Error(data.error || 'Failed to load categories');
         })
-        .catch(e => showToast('Connection error', 'error'));
+        .catch(e => {
+            console.error('Categories load failed:', e);
+            // Keep showing cached data if a refresh fails.
+            if (categoriesCache) {
+                categories = categoriesCache;
+                renderCategoryLists();
+                updateCategoryDropdown();
+            }
+            throw e;
+        });
 }
 
 function populateDropdowns() {
@@ -940,6 +968,10 @@ function addTransaction() {
         .then(r => r.json())
         .then(result => {
             if (result.success) {
+                transactionsCache = null;
+                transactionsCacheTime = 0;
+                recentTransactionsData = [];
+                analyticsTransactions = null;
                 showToast('Transaction added', 'success');
                 resetTransactionForm();
                 loadDashboardStats();
@@ -974,6 +1006,10 @@ function updateTransaction(row) {
         .then(r => r.json())
         .then(result => {
             if (result.success) {
+                transactionsCache = null;
+                transactionsCacheTime = 0;
+                recentTransactionsData = [];
+                analyticsTransactions = null;
                 showToast('Transaction updated', 'success');
                 cancelEdit();
                 loadDashboardStats();
@@ -1330,7 +1366,9 @@ function saveCategories() {
         .then(result => {
             if (result.success) {
                 showToast('Changes saved', 'success');
-                loadCategories();
+                categoriesCache = null;
+                categoriesCacheTime = 0;
+                loadCategories(true);
             } else {
                 showToast('Error: ' + result.error, 'error');
             }
@@ -1341,45 +1379,92 @@ function saveCategories() {
 // =========================================================
 // RECENT TRANSACTIONS (unchanged call)
 // =========================================================
-function loadRecentTransactions() {
-    document.getElementById('recentList').innerHTML = `
-        <div class="section-spinner"><div class="ring"></div><span>Fetching transactions…</span></div>`;
+function loadRecentTransactions(forceRefresh = false) {
+    const now = Date.now();
+
+    // Instant render from cache.
+    if (!forceRefresh && transactionsCache && (now - transactionsCacheTime < CACHE_TTL)) {
+        recentTransactionsData = transactionsCache;
+        analyticsTransactions = transactionsCache;
+        renderRecentTransactions();
+        return Promise.resolve(transactionsCache);
+    }
+
+    // If cache exists but is stale, show it immediately and refresh in background.
+    if (!forceRefresh && transactionsCache) {
+        recentTransactionsData = transactionsCache;
+        analyticsTransactions = transactionsCache;
+        renderRecentTransactions();
+    } else {
+        document.getElementById('recentList').innerHTML = `
+            <div class="section-spinner"><div class="ring"></div><span>Fetching transactions…</span></div>`;
+    }
+
     const params = new URLSearchParams({ action: 'getRecentTransactions' });
-    fetch(DEPLOYMENT_URL + '?' + params)
+
+    return fetch(DEPLOYMENT_URL + '?' + params)
         .then(r => r.json())
         .then(data => {
-            if (data.success && data.transactions.length > 0) {
-                recentTransactionsData = data.transactions;
-                const html = data.transactions.slice().reverse().map(tx => `
-                    <div class="card ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">
-                        <div class="card-header">
-                            <div class="card-title">${tx.category}</div>
-                            <div class="card-amount ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">
-                                ${parseFloat(tx.income) > 0 ? '+' : '-'}₹${formatINR(parseFloat(tx.amount))}
-                            </div>
-                        </div>
-                        <div class="card-meta">
-                            <span class="badge ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">${tx.type}</span>
-                            <span>${tx.date}</span>
-                            <span>Bal ₹${formatINR(parseFloat(tx.balance))}</span>
-                        </div>
-                        <div class="card-footer">
-                            <span class="desc">${tx.description || ''}</span>
-                            <button class="btn btn-edit" onclick="editTransactionFromList(${tx.row})"><svg class="icon" style="width:12px;height:12px;"><use href="#i-edit"/></svg>Edit</button>
-                        </div>
-                    </div>
-                `).join('');
-                document.getElementById('recentList').innerHTML = html + showMoreRowHTML();
-            } else {
-                recentTransactionsData = [];
-                document.getElementById('recentList').innerHTML = `
-                    <div class="empty-state">
-                        <svg class="icon"><use href="#i-notes"/></svg>
-                        <p>No transactions yet</p>
-                    </div>` + showMoreRowHTML();
+            if (data.success && Array.isArray(data.transactions)) {
+                transactionsCache = data.transactions;
+                transactionsCacheTime = Date.now();
+                recentTransactionsData = transactionsCache;
+                analyticsTransactions = transactionsCache;
+                renderRecentTransactions();
+                return transactionsCache;
             }
+            throw new Error(data.error || 'Failed to load transactions');
         })
-        .catch(e => document.getElementById('recentList').innerHTML = '<p style="color:var(--coral);">Error loading</p>');
+        .catch(e => {
+            console.error('Recent transactions load failed:', e);
+
+            // Do not destroy good cached data when refresh fails.
+            if (transactionsCache) {
+                recentTransactionsData = transactionsCache;
+                analyticsTransactions = transactionsCache;
+                renderRecentTransactions();
+                return transactionsCache;
+            }
+
+            document.getElementById('recentList').innerHTML =
+                '<p style="color:var(--coral);">Error loading</p>';
+            throw e;
+        });
+}
+
+function renderRecentTransactions() {
+    const data = recentTransactionsData || [];
+
+    if (data.length > 0) {
+        const html = data.slice().reverse().map(tx => `
+            <div class="card ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">
+                <div class="card-header">
+                    <div class="card-title">${tx.category}</div>
+                    <div class="card-amount ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">
+                        ${parseFloat(tx.income) > 0 ? '+' : '-'}₹${formatINR(parseFloat(tx.amount))}
+                    </div>
+                </div>
+                <div class="card-meta">
+                    <span class="badge ${parseFloat(tx.income) > 0 ? 'income' : 'expense'}">${tx.type}</span>
+                    <span>${tx.date}</span>
+                    <span>Bal ₹${formatINR(parseFloat(tx.balance))}</span>
+                </div>
+                <div class="card-footer">
+                    <span class="desc">${tx.description || ''}</span>
+                    <button class="btn btn-edit" onclick="editTransactionFromList(${tx.row})">
+                        <svg class="icon" style="width:12px;height:12px;"><use href="#i-edit"/></svg>Edit
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        document.getElementById('recentList').innerHTML = html + showMoreRowHTML();
+    } else {
+        document.getElementById('recentList').innerHTML = `
+            <div class="empty-state">
+                <svg class="icon"><use href="#i-notes"/></svg>
+                <p>No transactions yet</p>
+            </div>` + showMoreRowHTML();
+    }
 }
 
 function showMoreRowHTML(){
@@ -1417,36 +1502,43 @@ function loadDashboardStats() {
 // =========================================================
 let analyticsError = null;
 
-function loadAnalytics(){
-    if (analyticsTransactions !== null){ renderAnalytics(); return; }
-    document.getElementById('analyticsSummary').innerHTML = `
-        <div class="section-spinner" style="grid-column:1/-1;"><div class="ring"></div><span>Crunching your numbers…</span></div>`;
-    const params = new URLSearchParams({ action: 'getRecentTransactions' });
-    analyticsError = null;
-    fetch(DEPLOYMENT_URL + '?' + params)
-        .then(r => r.json())
+function loadAnalytics(forceRefresh = false){
+    // Reuse the same transaction cache used by Recent Transactions.
+    if (!forceRefresh && transactionsCache && (Date.now() - transactionsCacheTime < CACHE_TTL)) {
+        analyticsTransactions = transactionsCache;
+        renderAnalytics();
+        return Promise.resolve(transactionsCache);
+    }
+
+    if (transactionsCache) {
+        // Show cached analytics immediately while Recent refreshes.
+        analyticsTransactions = transactionsCache;
+        renderAnalytics();
+    } else {
+        document.getElementById('analyticsSummary').innerHTML = `
+            <div class="section-spinner" style="grid-column:1/-1;">
+                <div class="ring"></div><span>Crunching your numbers…</span>
+            </div>`;
+    }
+
+    // One shared loader: this updates both Recent and Analytics caches.
+    return loadRecentTransactions(forceRefresh)
         .then(data => {
-            console.log('getRecentTransactions response:', data);
-            if (data.success && Array.isArray(data.transactions)) {
-                analyticsTransactions = data.transactions;
-            } else {
-                analyticsTransactions = [];
-                analyticsError = data.error || 'The sheet returned no transactions for this request.';
-            }
+            analyticsTransactions = data;
+            analyticsError = null;
+            renderAnalytics();
+            return data;
         })
         .catch(e => {
-            console.error('getRecentTransactions failed:', e);
-            analyticsTransactions = null; // don't cache a failure — retry next time the tab opens
             analyticsError = e.message || 'Connection error';
-        })
-        .finally(() => {
-            // Rendering (incl. charts) is kept separate so a display-only problem
-            // is never mislabeled as a data connection error.
-            try {
+            // Keep rendering cached data if available.
+            if (transactionsCache) {
+                analyticsTransactions = transactionsCache;
                 renderAnalytics();
-            } catch (renderErr) {
-                console.error('Analytics render failed:', renderErr);
+            } else {
+                renderAnalytics();
             }
+            return null;
         });
 }
 
