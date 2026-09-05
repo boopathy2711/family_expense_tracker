@@ -1173,35 +1173,86 @@ function loadCategories(forceRefresh = false) {
     const now = Date.now();
 
     // Use cached categories while they are still fresh.
-    if (!forceRefresh && categoriesCache && (now - categoriesCacheTime < CACHE_TTL)) {
+    if (
+        !forceRefresh &&
+        categoriesCache &&
+        (now - categoriesCacheTime < CACHE_TTL)
+    ) {
         categories = categoriesCache;
         renderCategoryLists();
-        updateCategoryDropdown();
+        populateDropdowns();
         return Promise.resolve(categoriesCache);
     }
 
-    const params = new URLSearchParams({ action: 'getCategories' });
+    const params = new URLSearchParams({
+        action: 'getCategories'
+    });
+
     return fetch(DEPLOYMENT_URL + '?' + params)
         .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                categoriesCache = data.categories;
-                categoriesCacheTime = Date.now();
-                categories = categoriesCache;
-                renderCategoryLists();
-                updateCategoryDropdown();
-                return categoriesCache;
+
+            if (!data.success) {
+                throw new Error(
+                    data.error || 'Failed to load categories'
+                );
             }
-            throw new Error(data.error || 'Failed to load categories');
+
+            // Apps Script returns the category fields directly.
+            // Do NOT use data.categories.
+            const loadedCategories = {
+                incomeCategories:
+                    Array.isArray(data.incomeCategories)
+                        ? data.incomeCategories
+                        : [],
+
+                expenseCategories:
+                    Array.isArray(data.expenseCategories)
+                        ? data.expenseCategories
+                        : [],
+
+                familyMembers:
+                    Array.isArray(data.familyMembers)
+                        ? data.familyMembers
+                        : [],
+
+                paymentMethods:
+                    Array.isArray(data.paymentMethods)
+                        ? data.paymentMethods
+                        : [],
+
+                transactionTypes:
+                    Array.isArray(data.transactionTypes)
+                        ? data.transactionTypes
+                        : []
+            };
+
+            categoriesCache = loadedCategories;
+            categoriesCacheTime = Date.now();
+
+            categories = loadedCategories;
+
+            renderCategoryLists();
+            populateDropdowns();
+
+            return categoriesCache;
         })
         .catch(e => {
-            console.error('Categories load failed:', e);
+
+            console.error(
+                'Categories load failed:',
+                e
+            );
+
             // Keep showing cached data if a refresh fails.
             if (categoriesCache) {
                 categories = categoriesCache;
                 renderCategoryLists();
-                updateCategoryDropdown();
+                populateDropdowns();
+
+                return categoriesCache;
             }
+
             throw e;
         });
 }
