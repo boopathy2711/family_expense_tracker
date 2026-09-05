@@ -15,7 +15,7 @@ export default {
       return new Response("Ledger Push Worker is running.");
     }
 
-    // Test that the secret exists
+    // Secret check
     if (request.method === "GET" && url.pathname === "/test-secret") {
       return new Response(
         env.VAPID_PRIVATE_KEY
@@ -24,9 +24,25 @@ export default {
       );
     }
 
-    // Send push notification
+    // Send notification
     if (request.method === "POST" && url.pathname === "/send") {
       try {
+        // ---------------------------------------------
+        // SECURITY
+        // ---------------------------------------------
+        const authHeader = request.headers.get("Authorization");
+        const expectedToken = `Bearer ${env.LEDGER_PUSH_TOKEN}`;
+
+        if (!authHeader || authHeader !== expectedToken) {
+          return Response.json(
+            {
+              success: false,
+              error: "Unauthorized"
+            },
+            { status: 401 }
+          );
+        }
+
         const data = await request.json();
 
         if (!data.subscription) {
@@ -39,12 +55,18 @@ export default {
           );
         }
 
+        // ---------------------------------------------
+        // VAPID
+        // ---------------------------------------------
         webpush.setVapidDetails(
           VAPID_SUBJECT,
           VAPID_PUBLIC_KEY,
           env.VAPID_PRIVATE_KEY
         );
 
+        // ---------------------------------------------
+        // NOTIFICATION
+        // ---------------------------------------------
         const payload = JSON.stringify({
           title: data.title || "Ledger",
           body: data.body || "New transaction added",
@@ -62,7 +84,10 @@ export default {
         });
 
       } catch (error) {
-        console.error("Push notification error:", error);
+        console.error(
+          "Push notification error:",
+          error
+        );
 
         return Response.json(
           {
@@ -74,6 +99,8 @@ export default {
       }
     }
 
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found", {
+      status: 404
+    });
   }
 };
