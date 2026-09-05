@@ -1,9 +1,9 @@
 {
   "name": "Family Expense Tracker",
-  "short_name": "Family Expenses",
-  "start_url": "/",
+  "short_name": "Ledger",
+  "start_url": "/family_expense_tracker/",
+  "scope": "/family_expense_tracker/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
-  "icons": []
+  "theme_color": "#1B3B2F",
+  "background_color": "#F7F4EA"
 }
