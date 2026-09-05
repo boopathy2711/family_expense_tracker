@@ -728,6 +728,117 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- HOME SCREEN INSTALL PROMPT -->
+<div id="homeScreenPrompt" style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    z-index:10000;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+">
+    <div style="
+        width:min(420px,100%);
+        background:var(--paper-2,#fff);
+        color:var(--ink,#1B3B2F);
+        border-radius:18px;
+        padding:24px;
+        box-shadow:0 20px 60px rgba(0,0,0,.2);
+    ">
+        <div style="font-size:30px;margin-bottom:12px;">📱</div>
+
+        <div style="
+            font-size:20px;
+            font-weight:700;
+            margin-bottom:8px;
+        ">
+            Add Ledger to Home Screen
+        </div>
+
+        <div style="
+            font-size:14px;
+            line-height:1.5;
+            color:var(--ink-soft,#666);
+            margin-bottom:18px;
+        ">
+            Add Ledger to your Home Screen so it works like an app and you can receive
+            expense and income notifications.
+        </div>
+
+        <div id="iosInstallInstructions" style="
+            display:none;
+            margin-bottom:18px;
+        ">
+            <div style="
+                background:var(--paper,#F6F2E7);
+                border:1px solid var(--line,#E3DCC8);
+                border-radius:12px;
+                padding:13px;
+                font-size:13px;
+                line-height:1.65;
+            ">
+                <b>On iPhone / iPad:</b><br>
+                1. Tap the <b>Share</b> button in Safari<br>
+                2. Tap <b>Add to Home Screen</b><br>
+                3. Tap <b>Add</b><br>
+                4. Open Ledger from your Home Screen
+            </div>
+        </div>
+
+        <div id="androidInstallInstructions" style="
+            display:none;
+            margin-bottom:18px;
+        ">
+            <div style="
+                background:var(--paper,#F6F2E7);
+                border:1px solid var(--line,#E3DCC8);
+                border-radius:12px;
+                padding:13px;
+                font-size:13px;
+                line-height:1.65;
+            ">
+                <b>On Android:</b><br>
+                Use <b>Add to Home Screen</b> / <b>Install app</b> when offered.
+                If no install button appears, use the browser menu and choose
+                <b>Add to Home Screen</b>.
+            </div>
+        </div>
+
+        <div style="
+            display:flex;
+            gap:10px;
+        ">
+            <button
+                class="btn btn-secondary"
+                onclick="dismissHomeScreenPrompt()"
+                style="flex:1;">
+                Later
+            </button>
+
+            <button
+                class="btn btn-primary"
+                id="installLedgerBtn"
+                onclick="handleInstallLedger()"
+                style="flex:1;">
+                Add to Home Screen
+            </button>
+        </div>
+
+        <div style="
+            margin-top:12px;
+            font-size:10.5px;
+            line-height:1.4;
+            text-align:center;
+            color:var(--ink-soft,#777);
+        ">
+            Ledger will continue to the notification setup after it is opened
+            from the Home Screen.
+        </div>
+    </div>
+</div>
+
 <!-- NOTIFICATION PERMISSION PROMPT -->
 <div id="notificationPrompt" style="
     display:none;
@@ -741,7 +852,8 @@
 ">
     <div style="
         width:min(420px,100%);
-        background:var(--surface,#fff);
+        background:var(--paper-2,#fff);
+        color:var(--ink,#1B3B2F);
         border-radius:18px;
         padding:24px;
         box-shadow:0 20px 60px rgba(0,0,0,.2);
@@ -759,7 +871,7 @@
         <div style="
             font-size:14px;
             line-height:1.5;
-            color:var(--muted,#666);
+            color:var(--ink-soft,#666);
             margin-bottom:20px;
         ">
             Get notified whenever a new expense or income is added to Ledger.
@@ -786,6 +898,7 @@
         </div>
     </div>
 </div>
+
 <script>
 // =========================================================
 // CONFIG — unchanged endpoint / payload contract
@@ -866,6 +979,184 @@ async function registerPushServiceWorker() {
 
 const LEDGER_VAPID_PUBLIC_KEY =
     'BDn3ObeZaAaySHgh5OaKkBGSkuRRRAQlshcvxAd5aH3LtyOqADcpSmrp5_EWdgPY5RtOKTF9b_HOgLV-G6KQdzE';
+
+
+// =========================================================
+// PWA — HOME SCREEN INSTALLATION
+// =========================================================
+
+let ledgerDeferredInstallPrompt = null;
+
+function isLedgerStandalone() {
+    return (
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true
+    );
+}
+
+function isIOSDevice() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isAndroidDevice() {
+    return /Android/i.test(navigator.userAgent);
+}
+
+function isMobileDevice() {
+    return isIOSDevice() || isAndroidDevice() ||
+        /Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function showHomeScreenPrompt() {
+    const prompt = document.getElementById('homeScreenPrompt');
+    if (!prompt) return;
+
+    const ios = isIOSDevice();
+    const installButton = document.getElementById('installLedgerBtn');
+    const iosInstructions = document.getElementById('iosInstallInstructions');
+    const androidInstructions = document.getElementById('androidInstallInstructions');
+
+    if (ios) {
+        if (iosInstructions) iosInstructions.style.display = 'block';
+        if (androidInstructions) androidInstructions.style.display = 'none';
+        if (installButton) installButton.textContent = "I've Added Ledger";
+    } else {
+        if (iosInstructions) iosInstructions.style.display = 'none';
+        if (androidInstructions) androidInstructions.style.display = 'block';
+
+        if (ledgerDeferredInstallPrompt) {
+            if (installButton) installButton.textContent = 'Add to Home Screen';
+        } else {
+            if (installButton) installButton.textContent = "I've Added Ledger";
+        }
+    }
+
+    prompt.style.display = 'flex';
+}
+
+function dismissHomeScreenPrompt() {
+    const prompt = document.getElementById('homeScreenPrompt');
+    if (prompt) prompt.style.display = 'none';
+}
+
+async function handleInstallLedger() {
+    // If already running from Home Screen, continue to notifications.
+    if (isLedgerStandalone()) {
+        localStorage.setItem('ledger_home_screen_installed', 'true');
+        dismissHomeScreenPrompt();
+        scheduleNotificationPrompt();
+        return;
+    }
+
+    // Android / supported browsers: use the native install prompt if available.
+    if (ledgerDeferredInstallPrompt) {
+        try {
+            ledgerDeferredInstallPrompt.prompt();
+
+            const choice = await ledgerDeferredInstallPrompt.userChoice;
+
+            if (choice && choice.outcome === 'accepted') {
+                localStorage.setItem('ledger_home_screen_installed', 'true');
+                ledgerDeferredInstallPrompt = null;
+                dismissHomeScreenPrompt();
+
+                showToast(
+                    'Ledger added. Open it from your Home Screen.',
+                    'success'
+                );
+                return;
+            }
+        } catch (error) {
+            console.warn('Ledger install prompt failed:', error);
+        }
+    }
+
+    // iPhone/iPad or browsers without a native install prompt:
+    // the user must add Ledger manually and reopen it from Home Screen.
+    if (isIOSDevice()) {
+        showToast(
+            'Use Share → Add to Home Screen, then open Ledger from your Home Screen.',
+            'success'
+        );
+    } else {
+        showToast(
+            'Add Ledger to your Home Screen, then open it from there.',
+            'success'
+        );
+    }
+}
+
+function scheduleNotificationPrompt() {
+    // Do not show notification setup until Ledger is running
+    // as an installed Home Screen app.
+    if (!isLedgerStandalone()) return;
+
+    if (
+        'Notification' in window &&
+        Notification.permission === 'granted'
+    ) {
+        return;
+    }
+
+    setTimeout(() => {
+        showNotificationPrompt();
+    }, 800);
+}
+
+function checkLedgerSetup() {
+    // Desktop users do not need the Home Screen installation step.
+    if (!isMobileDevice()) {
+        scheduleNotificationPrompt();
+        return;
+    }
+
+    // Already running as an installed Home Screen app.
+    if (isLedgerStandalone()) {
+        localStorage.setItem('ledger_home_screen_installed', 'true');
+        dismissHomeScreenPrompt();
+        scheduleNotificationPrompt();
+        return;
+    }
+
+    // Still in Safari/Chrome mobile: require Home Screen installation first.
+    if (localStorage.getItem('ledger_home_screen_installed') !== 'true') {
+        setTimeout(() => {
+            showHomeScreenPrompt();
+        }, 1200);
+    } else {
+        // The flag may have been set previously, but we cannot confirm
+        // installation until the app is actually opened standalone.
+        setTimeout(() => {
+            showHomeScreenPrompt();
+        }, 1200);
+    }
+}
+
+// Android/Chrome fires this before the browser's install UI becomes available.
+window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    ledgerDeferredInstallPrompt = event;
+});
+
+window.addEventListener('appinstalled', () => {
+    localStorage.setItem('ledger_home_screen_installed', 'true');
+    ledgerDeferredInstallPrompt = null;
+    dismissHomeScreenPrompt();
+
+    showToast(
+        'Ledger added to your Home Screen.',
+        'success'
+    );
+});
+
+// When an iPhone/Android Home Screen app is opened, standalone mode is available.
+window.addEventListener('pageshow', () => {
+    if (isLedgerStandalone()) {
+        localStorage.setItem('ledger_home_screen_installed', 'true');
+        dismissHomeScreenPrompt();
+    }
+});
 
 function showNotificationPrompt() {
     const prompt = document.getElementById('notificationPrompt');
@@ -1144,19 +1435,9 @@ applyDeviceMode();
 // =========================================================
 window.addEventListener('load', () => {
     registerPushServiceWorker().then(() => {
-        // Don't show anything if notifications are already enabled.
-        if (
-            'Notification' in window &&
-            Notification.permission === 'granted'
-        ) {
-            return;
-        }
-
-        // Give the app a moment to load before showing the prompt.
-        setTimeout(() => {
-            showNotificationPrompt();
-        }, 1200);
+        checkLedgerSetup();
     });
+
     const catP = loadCategories();
     const statsP = loadDashboardStats();
     Promise.allSettled([catP, statsP]).then(hideSplash);
