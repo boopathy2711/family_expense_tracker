@@ -747,14 +747,13 @@
         padding:24px;
         box-shadow:0 20px 60px rgba(0,0,0,.2);
     ">
-        <div style="font-size:30px;margin-bottom:12px;">📱</div>
 
         <div style="
             font-size:20px;
             font-weight:700;
             margin-bottom:8px;
         ">
-            Add Ledger to Home Screen
+            📱Add Ledger to Home Screen
         </div>
 
         <div style="
@@ -1078,10 +1077,32 @@ async function handleInstallLedger() {
     // iPhone/iPad or browsers without a native install prompt:
     // the user must add Ledger manually and reopen it from Home Screen.
     if (isIOSDevice()) {
-        showToast(
-            'Use Share → Add to Home Screen, then open Ledger from your Home Screen.',
-            'success'
-        );
+        // Keep the instruction inside the Home Screen card.
+        // Do not use a toast here because the card is already open and
+        // the toast can appear behind the modal.
+        const installButton = document.getElementById('installLedgerBtn');
+        if (installButton) installButton.textContent = "I've Added Ledger";
+
+        const instructions = document.getElementById('iosInstallInstructions');
+        if (instructions) {
+            const existing = instructions.querySelector('.install-check-message');
+            if (existing) existing.remove();
+
+            const message = document.createElement('div');
+            message.className = 'install-check-message';
+            message.style.cssText = `
+                margin-top:10px;
+                padding:9px 10px;
+                border-radius:8px;
+                background:var(--palm-pale,#E6EEE7);
+                font-size:12px;
+                line-height:1.45;
+                font-weight:600;
+            `;
+            message.textContent =
+                'After adding Ledger, open it from your Home Screen to continue.';
+            instructions.appendChild(message);
+        }
     } else {
         showToast(
             'Add Ledger to your Home Screen, then open it from there.',
