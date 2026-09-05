@@ -997,7 +997,20 @@ const saveResponse = await fetch(
     }
 );
 
-const saveResult = await saveResponse.json();
+const responseText = await saveResponse.text();
+
+console.log('Apps Script response status:', saveResponse.status);
+console.log('Apps Script raw response:', responseText);
+
+let saveResult;
+
+try {
+    saveResult = JSON.parse(responseText);
+} catch (e) {
+    throw new Error(
+        'Apps Script returned an invalid response: ' + responseText
+    );
+}
 
 if (!saveResult.success) {
     throw new Error(
