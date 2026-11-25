@@ -197,6 +197,12 @@
   }
   .btn:active:not(:disabled){transform:scale(0.97);}
   .btn:disabled{opacity:.55;cursor:not-allowed;}
+  .btn-spinner{
+    width:15px;height:15px;flex:none;border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff;border-radius:50%;display:inline-block;
+    animation:spin .7s linear infinite;
+  }
+  .btn.is-loading{cursor:wait;pointer-events:none;filter:saturate(.85);}
   .btn-primary{background:linear-gradient(135deg, var(--palm) 0%, var(--palm-light) 100%);color:#fff;box-shadow:var(--shadow-sm);}
   .btn-primary:hover{filter:brightness(1.04);}
   .btn-secondary{background:var(--paper);color:var(--ink);border:1.5px solid var(--line);}
@@ -580,7 +586,7 @@
             <textarea id="cocoNotes" placeholder="Additional notes..."></textarea>
           </div>
 
-          <button class="btn btn-primary" onclick="addCoconutIncome()"><svg class="icon" style="width:15px;height:15px;"><use href="#i-check"/></svg>Submit</button>
+          <button class="btn btn-primary" id="cocoSubmitBtn" onclick="addCoconutIncome()"><svg class="icon" style="width:15px;height:15px;"><use href="#i-check"/></svg>Submit</button>
         </div>
         </div>
 
@@ -708,7 +714,7 @@
           <div id="paymentList"></div>
           <button class="btn btn-add" onclick="addPaymentMethod()"><svg class="icon" style="width:14px;height:14px;"><use href="#i-plus-sm"/></svg>Add</button>
 
-          <button class="btn btn-primary" onclick="saveCategories()" style="margin-top:20px;"><svg class="icon" style="width:15px;height:15px;"><use href="#i-check"/></svg>Save Changes</button>
+          <button class="btn btn-primary" id="saveCategoriesBtn" onclick="saveCategories()" style="margin-top:20px;"><svg class="icon" style="width:15px;height:15px;"><use href="#i-check"/></svg>Save Changes</button>
         </div>
       </section>
 
@@ -1586,6 +1592,29 @@ function updateCategoryDropdown() {
 }
 
 // =========================================================
+// Button loading state for asynchronous save operations.
+// Returns a restore function, or null when the button is already busy.
+function setButtonLoading(buttonId, loadingText = 'Saving...') {
+    const button = document.getElementById(buttonId);
+    if (!button || button.disabled) return null;
+
+    const originalHTML = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('is-loading');
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${loadingText}</span>`;
+
+    let restored = false;
+    return function restoreButton() {
+        if (restored) return;
+        restored = true;
+        button.disabled = false;
+        button.classList.remove('is-loading');
+        button.removeAttribute('aria-busy');
+        button.innerHTML = originalHTML;
+    };
+}
+
 // ADD / EDIT TRANSACTION (unchanged payloads)
 // =========================================================
 function submitTransaction() {
@@ -1616,6 +1645,9 @@ function addTransaction() {
         return;
     }
 
+    const restoreButton = setButtonLoading('txSubmitBtn', 'Saving Transaction...');
+    if (!restoreButton) return;
+
     fetch(DEPLOYMENT_URL, { method: 'POST', body: JSON.stringify(data) })
         .then(r => r.json())
         .then(result => {
@@ -1631,7 +1663,8 @@ function addTransaction() {
                 showToast('Error: ' + result.error, 'error');
             }
         })
-        .catch(e => showToast('Error: ' + e.message, 'error'));
+        .catch(e => showToast('Error: ' + e.message, 'error'))
+        .finally(() => restoreButton());
 }
 
 function updateTransaction(row) {
@@ -1654,6 +1687,9 @@ function updateTransaction(row) {
         return;
     }
 
+    const restoreButton = setButtonLoading('txSubmitBtn', 'Updating Transaction...');
+    if (!restoreButton) return;
+
     fetch(DEPLOYMENT_URL, { method: 'POST', body: JSON.stringify(data) })
         .then(r => r.json())
         .then(result => {
@@ -1670,7 +1706,8 @@ function updateTransaction(row) {
                 showToast('Error: ' + result.error, 'error');
             }
         })
-        .catch(e => showToast('Error: ' + e.message, 'error'));
+        .catch(e => showToast('Error: ' + e.message, 'error'))
+        .finally(() => restoreButton());
 }
 
 function resetTransactionForm() {
@@ -1752,6 +1789,9 @@ function addCoconutIncome() {
         return;
     }
 
+    const restoreButton = setButtonLoading('cocoSubmitBtn', 'Saving Income...');
+    if (!restoreButton) return;
+
     fetch(DEPLOYMENT_URL, { method: 'POST', body: JSON.stringify(data) })
         .then(r => r.json())
         .then(result => {
@@ -1775,7 +1815,8 @@ function addCoconutIncome() {
                 showToast('Error: ' + result.error, 'error');
             }
         })
-        .catch(e => showToast('Error: ' + e.message, 'error'));
+        .catch(e => showToast('Error: ' + e.message, 'error'))
+        .finally(() => restoreButton());
 }
 
 // =========================================================
@@ -2013,6 +2054,9 @@ function saveCategories() {
         paymentMethods: Array.from(document.querySelectorAll('#paymentList input')).map(el => el.value)
     };
 
+    const restoreButton = setButtonLoading('saveCategoriesBtn', 'Saving Changes...');
+    if (!restoreButton) return;
+
     fetch(DEPLOYMENT_URL, { method: 'POST', body: JSON.stringify(data) })
         .then(r => r.json())
         .then(result => {
@@ -2025,7 +2069,8 @@ function saveCategories() {
                 showToast('Error: ' + result.error, 'error');
             }
         })
-        .catch(e => showToast('Error: ' + e.message, 'error'));
+        .catch(e => showToast('Error: ' + e.message, 'error'))
+        .finally(() => restoreButton());
 }
 
 // =========================================================
